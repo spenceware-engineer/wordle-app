@@ -13,6 +13,7 @@ const userSchema = new Schema({
   completed: {
     type: Array,
     default: [],
+    required: true,
   },
 })
 

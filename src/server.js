@@ -1,19 +1,23 @@
 import express from 'express'
 import dotenv from 'dotenv'
+import cors from 'cors'
 import mongoose from 'mongoose'
 import connectDB from './database/connectDB.js'
 import bcrypt from 'bcrypt'
 import bodyParser from 'body-parser'
 import User from './database/User.js'
 import { getAndValidateWord } from './utils.js'
+import morgan from 'morgan'
 
 dotenv.config()
 const app = express()
 
 connectDB()
 
+app.use(cors())
 app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json())
+app.use(morgan())
 
 /**
  * @method POST
@@ -33,15 +37,15 @@ app.post('/register', async (req, res) => {
   const { username, password } = req.body
 
   const duplicate = await User.findOne({ username }).exec()
-  if (duplicate) return res.status(409).json({ message: 'Username already in use' }) //Conflict 
+  if (duplicate) return res.status(409).json({ message: 'Username already in use' })//Conflict 
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10)
     await User.create({ username, password: hashedPassword })
     const firstWord = await getAndValidateWord(username)
-    res.status(201).json({ word: firstWord, username })
+    return res.status(201).json({ word: firstWord, username, score: 0 })
   } catch (e) {
-    res.status(500).json(e)
+    return res.status(500).json(e)
   }
 })
 
@@ -58,20 +62,19 @@ app.post('/register', async (req, res) => {
  * 
  * if successful login, returns word for first round of play after login and the user's username
  */
-app.get('/login', async (req, res) => {
+app.post('/login', async (req, res) => {
   const { username, password } = req.body
-  
+
   try {
     const authUser = await User.findOne({ username }).exec()
-    if (!authUser) res.status(404).json({ message: 'User not found' })
+    if (!authUser) return res.status(404).json({ message: 'User not found' })
 
     const passwordMatch = await bcrypt.compare(password, authUser.password)
-    if (!passwordMatch) res.status(403).json({ message: 'Invalid Password' })
-
+    if (!passwordMatch) return res.status(403).json({ message: 'Invalid Password' })
     const firstWord = await getAndValidateWord(username)
-    res.status(200).json({ word: firstWord, username })
+    return res.status(200).json({ word: firstWord, username, score: authUser.completed.length })
   } catch (e) {
-    res.status(500).json(e)
+    return res.status(500).json(e)
   }
 })
 
@@ -81,13 +84,13 @@ app.get('/login', async (req, res) => {
  * gets and validates a word for next round of play
  * @returns { word: string } - word to use for next round
  */
-app.get('/random-word', async (req, res) => {
+app.post('/random-word', async (req, res) => {
   const { username } = req.body
   try {
     const word = await getAndValidateWord(username)
-    res.status(200).json({ word })
+    return res.status(200).json({ word })
   } catch (e) {
-    res.status(500).json(e)
+    return res.status(500).json(e)
   }
 })
 
@@ -103,14 +106,14 @@ app.get('/random-word', async (req, res) => {
 app.post('/word-completed', async (req, res) => {
   const { username, word } = req.body
   try {
-    const currentUser = User.findOne({ username }).exec()
+    const currentUser = await User.findOne({ username }).exec()
     await User.updateOne({ username }, {
       completed: [ ...currentUser.completed, word ]
     }).exec()
     const newWord = await getAndValidateWord(username)
-    res.status(200).json({ word: newWord })
+    return res.status(200).json({ word: newWord, score: currentUser.completed.length + 1 })
   } catch (e) {
-    res.status(500).json(e)
+    return res.status(500).json(e)
   }
 })
 

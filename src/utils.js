@@ -2,19 +2,6 @@ import fetch from 'node-fetch'
 import User from './database/User.js'
 
 /**
- * checks Dictionary API for word to make sure it is an English word
- * returns a boolean indicating whether it is a valid English word (true) or not (false)
- * @param {string} word - word to be validated
- * @returns boolean
- */
-const isValidWord = async (word) => {
-  const result = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`)
-  const data = await result.json()
-  if (data.title) return false
-  return true
-}
-
-/**
  * finds the current user and checks if the word has already been completed
  * returns a boolean indicating whether the word has (true) or has not (false) been completed already
  * @param {string} username - username of current user
@@ -22,7 +9,7 @@ const isValidWord = async (word) => {
  * @returns boolean
  */
 const isWordCompleted = async (username, word) => {
-  const currentUser = await User.findOne({username})
+  const currentUser = await User.findOne({ username })
   if (currentUser.completed.includes(word)) return true
   return false
 }
@@ -34,11 +21,28 @@ const isWordCompleted = async (username, word) => {
  * @returns string
  */
 export const getAndValidateWord = async (username) => {
-  let result = await fetch('https://random-word.ryanrk.com/api/en/word/random/?minlength=5&maxlength=5')
-  let data = await result.json()
-  while (!(await isValidWord(data[ 0 ])) || isWordCompleted(username, data[ 0 ])) {
-    result = await fetch('https://random-word.ryanrk.com/api/en/word/random/?minlength=5&maxlength=5')
-    data = await result.json()
+  let result = await fetch(
+    'https://wordsapiv1.p.rapidapi.com/words/?letters=5&random=true',
+    {
+      headers: {
+        'X-RapidAPI-Key': process.env.WORDS_API_KEY,
+        'X-RapidAPI-Host': process.env.WORDS_API_HOST,
+      }
+    }
+  )
+  let { word } = await result.json()
+  while (await isWordCompleted(username, word)) {
+    result = await fetch(
+      'https://wordsapiv1.p.rapidapi.com/words/?letters=5&random=true',
+      {
+        headers: {
+          'X-RapidAPI-Key': process.env.WORDS_API_KEY,
+          'X-RapidAPI-Host': process.env.WORDS_API_HOST,
+        }
+      }
+    )
+    let data = await result.json()
+    word = data.word
   }
-  return data[ 0 ]
+  return word
 }
